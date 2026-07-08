@@ -1,0 +1,356 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="UTF-8">
+<title>PeerChat</title>
+<style>
+  body { background:#0f172a; color:#e5e7eb; font-family:Arial; padding:20px; }
+  input,button { padding:8px; border:none; border-radius:6px; margin:4px 0; }
+  input { width:100%; background:#1e293b; color:white; }
+  button { background:#3b82f6; color:white; cursor:pointer; }
+  #chat, #syslog {
+    margin-top:20px;
+    background:#1e293b;
+    padding:10px;
+    height:150px;
+    overflow-y:auto;
+    border-radius:8px;
+  }
+  .msg-you { color:#93c5fd; }
+  .msg-them { color:#fca5a5; }
+  .sys { color:#a5f3fc; font-style:italic; }
+  .pill { display:inline-block; padding:6px 10px; background:#020617; border-radius:999px; border:1px solid #1f2937; margin-right:6px; margin-bottom:6px; }
+  label { display:inline-block; margin-top:10px; }
+</style>
+</head>
+<body>
+
+<div id="account_screen">
+  <h2>Create Account</h2>
+  <input id="new_username" placeholder="username">
+  <input id="new_desc" placeholder="desc">
+  <button onclick="createAccount()">Create</button>
+
+  <h2>Sign In</h2>
+  <input id="existing_key" placeholder="paste your login fingerprint">
+  <button onclick="signIn()">Sign In</button>
+</div>
+
+<div id="chat_screen" style="display:none;">
+  <h3>Your Identity</h3>
+  <div class="pill" id="pill_name"></div>
+  <div class="pill" id="pill_desc"></div>
+  <div class="pill" id="pill_id"></div>
+  <div class="pill" id="pill_hash"></div>
+  <div class="pill" id="pill_fingerprint"></div>
+  <div class="pill" id="pill_peer">PeerJS: loading…</div>
+
+  <h3>System Log</h3>
+  <div id="syslog"></div>
+
+  <h3>Connect</h3>
+  <input id="peer_input" placeholder="peer id (letters only)">
+  <button onclick="connectPeer()">Connect</button>
+
+  <h3>Chat</h3>
+  <div id="chat"></div>
+
+  <input id="msg_input" placeholder="message">
+  <button onclick="sendMsg()">Send</button>
+
+  <br><br>
+  <button onclick="downloadLogs()">Download peerchat_export.txt</button>
+  <br>
+  <label>
+    <input type="checkbox" id="auto_download_checkbox">
+    Always download logs when leaving
+  </label>
+</div>
+
+<script src="https://unpkg.com/peerjs@1.5.2/dist/peerjs.min.js"></script>
+<script>
+  let username="", desc="", id8="", longnum="", hash="", peer=null, conn=null;
+
+  let identityReceived = false;
+  let identitySentBack = false;
+
+  const sysLogs = [];
+  const outbox = [];
+  const inbox  = [];
+
+  function now() {
+    return new Date().toLocaleString();
+  }
+
+  async function sha256(text){
+    const encoder=new TextEncoder();
+    const data=encoder.encode(text);
+    const hashBuffer=await crypto.subtle.digest("SHA-256",data);
+    const hashArray=Array.from(new Uint8Array(hashBuffer));
+    return hashArray.map(b=>b.toString(16).padStart(2,"0")).join("");
+  }
+
+  function makeID8(){
+    const chars="abcdefghijklmnopqrstuvwxyz";
+    let out="";
+    for(let i=0;i<8;i++) out+=chars[Math.floor(Math.random()*chars.length)];
+    return out;
+  }
+
+  function makeLongNum(){
+    return Math.floor(Math.random()*1e18).toString();
+  }
+
+  async function createAccount(){
+    username=document.getElementById("new_username").value.trim();
+    desc=document.getElementById("new_desc").value.trim();
+    if(!username||!desc) return;
+
+    id8=makeID8();
+    longnum=makeLongNum();
+
+    let internal = `${username}|${desc}|${id8}|${longnum}`;
+    hash = await sha256(internal);
+    let encoded = btoa(internal);
+
+    let finalKey = hash + ":" + encoded;
+
+    alert("SAVE THIS LOGIN FINGERPRINT:\n\n" + finalKey + "\n\nPaste it into a text document. Do NOT share it.");
+
+    startChat();
+
+    document.getElementById("pill_fingerprint").textContent = "Fingerprint: " + finalKey;
+    addSys("Account created at " + now());
+  }
+
+  async function signIn(){
+    let key=document.getElementById("existing_key").value.trim();
+    if(!key.includes(":")){
+      alert("Invalid fingerprint format.");
+      return;
+    }
+
+    let parts = key.split(":");
+    let hashPart = parts[0];
+    let internal = atob(parts[1]);
+
+    let checkHash = await sha256(internal);
+    if(checkHash !== hashPart){
+      alert("Fingerprint does not match identity.");
+      return;
+    }
+
+    hash = hashPart;
+
+    let fields = internal.split("|");
+    username = fields[0];
+    desc     = fields[1];
+    id8      = fields[2];
+    longnum  = fields[3];
+
+    startChat();
+
+    document.getElementById("pill_fingerprint").textContent = "Fingerprint: " + key;
+    addSys("Signed in at " + now());
+  }
+
+  function startChat(){
+    document.getElementById("account_screen").style.display="none";
+    document.getElementById("chat_screen").style.display="block";
+
+    document.getElementById("pill_name").textContent="Username: "+username;
+    document.getElementById("pill_desc").textContent="Desc: "+desc;
+    document.getElementById("pill_id").textContent="ID: "+id8;
+    document.getElementById("pill_hash").textContent="HASH: "+hash;
+
+    peer=new Peer(id8);
+    peer.on("open",id=>{
+      document.getElementById("pill_peer").textContent="PeerJS: "+id;
+      addSys("PeerJS open: " + id + " at " + now());
+    });
+
+    peer.on("connection",c=>{
+      conn=c;
+      addSys("Incoming connection at " + now());
+
+      conn.on("data",data=>{
+        handleData(data);
+      });
+
+      conn.send({ type:"identity_request" });
+    });
+
+    window.onbeforeunload = function(e){
+      const auto = document.getElementById("auto_download_checkbox");
+      if(auto && auto.checked){
+        alert("Downloading it...");
+        downloadLogs(true);
+        alert("Done, you can now safely leave.");
+      }
+    };
+  }
+
+  function connectPeer(){
+    const target=document.getElementById("peer_input").value.trim();
+    if(!target) return;
+
+    conn=peer.connect(target);
+
+    conn.on("open",()=>{
+      conn.send({ type:"identity_request" });
+      addSys("You connected to " + target + " at " + now());
+
+      conn.on("data",data=>{
+        handleData(data);
+      });
+
+      flushOutbox();
+    });
+  }
+
+  function handleData(data){
+    if(data.type==="identity_request" && !identitySentBack){
+      sendIdentity();
+      identitySentBack = true;
+    }
+
+    if(data.type==="identity" && !identityReceived){
+      identityReceived = true;
+      inbox.push({ time: now(), from: "them", text: `IDENTITY → ${data.username} | ${data.desc} | ${data.id8}` });
+      addChat(`[${now()}] Them → ${data.username} | ${data.desc} | ${data.id8}`, "them");
+      addSys("They connected: " + data.username + " | " + data.desc + " | " + data.id8 + " at " + now());
+
+      if(!identitySentBack){
+        sendIdentity();
+        identitySentBack = true;
+      }
+    }
+
+    if(data.type==="msg"){
+      inbox.push({ time: now(), from: "them", text: data.text });
+      addChat(`[${now()}] Them: ${data.text}`,"them");
+    }
+  }
+
+  function sendIdentity(){
+    if(!conn) return;
+    conn.send({
+      type:"identity",
+      username,
+      desc,
+      id8
+    });
+    outbox.push({ time: now(), to: "them", text: "IDENTITY sent" });
+  }
+
+  function sendMsg(){
+    const text=document.getElementById("msg_input").value.trim();
+    if(!text) return;
+
+    const entry = { time: now(), to: "them", text };
+
+    if(!conn || conn.open === false){
+      const targetID = document.getElementById("peer_input").value.trim();
+      addSys(`ID ${targetID} is offline at ${now()}`);
+
+      let choice = prompt(
+        "They are offline.\n\n" +
+        "Do you want to send this message to their outbox?\n\n" +
+        "1. Yes\n" +
+        "2. No\n\n" +
+        "Outbox explained:\n" +
+        "If you choose YES, the message will be saved in your outbox.\n" +
+        "When the other person comes online, PeerChat will automatically send all queued outbox messages.\n"
+      );
+
+      if(choice === "1"){
+        outbox.push(entry);
+        addChat(`[${entry.time}] (queued) You: ${text}`, "you");
+        addSys("Message added to outbox at " + entry.time);
+      } else {
+        addSys("Message cancelled at " + entry.time);
+      }
+
+      document.getElementById("msg_input").value="";
+      return;
+    }
+
+    conn.send({type:"msg",text});
+    outbox.push(entry);
+    addChat(`[${entry.time}] You: ${text}`,"you");
+    document.getElementById("msg_input").value="";
+  }
+
+  function flushOutbox(){
+    if(!conn) return;
+    outbox.forEach(m=>{
+      if(m.text !== "IDENTITY sent"){
+        conn.send({ type:"msg", text:m.text });
+      }
+    });
+    addSys("Outbox flushed at " + now());
+  }
+
+  function addChat(text,who){
+    const box=document.getElementById("chat");
+    const div=document.createElement("div");
+    div.className=who==="you"?"msg-you":"msg-them";
+    div.textContent=text;
+    box.appendChild(div);
+    box.scrollTop=box.scrollHeight;
+  }
+
+  function addSys(text){
+    sysLogs.push(`[${now()}] ${text}`);
+    const box=document.getElementById("syslog");
+    const div=document.createElement("div");
+    div.className="sys";
+    div.textContent=text;
+    box.appendChild(div);
+    box.scrollTop=box.scrollHeight;
+  }
+
+  function downloadLogs(silent){
+    let content = "";
+
+    content += "=== Identity ===\n";
+    content += `Username: ${username}\n`;
+    content += `Desc: ${desc}\n`;
+    content += `ID: ${id8}\n`;
+    content += `Hash: ${hash}\n`;
+    const fp = document.getElementById("pill_fingerprint")?.textContent || "";
+    content += `${fp}\n\n`;
+
+    content += "=== System Logs ===\n";
+    sysLogs.forEach(l=>content += l + "\n");
+    content += "\n";
+
+    content += "=== Outbox ===\n";
+    outbox.forEach(m=>{
+      content += `[${m.time}] to ${m.to}: ${m.text}\n`;
+    });
+    content += "\n";
+
+    content += "=== Inbox ===\n";
+    inbox.forEach(m=>{
+      content += `[${m.time}] from ${m.from}: ${m.text}\n`;
+    });
+
+    const blob = new Blob([content], { type: "text/plain" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = "peerchat_export.txt";
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+
+    if(!silent){
+      alert("peerchat_export.txt downloaded.");
+    }
+  }
+</script>
+
+</body>
+</html>
