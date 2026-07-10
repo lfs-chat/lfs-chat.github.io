@@ -225,28 +225,38 @@
   }
 
   function handleData(data){
-    if(data.type==="identity_request" && !identitySentBack){
+
+  // ALWAYS handle messages first (fixes queued messages)
+  if(data.type==="msg"){
+    inbox.push({ time: now(), from: "them", text: data.text });
+    addChat(`[${now()}] Them: ${data.text}`,"them");
+    return;
+  }
+
+  // identity request
+  if(data.type==="identity_request" && !identitySentBack){
+    sendIdentity();
+    identitySentBack = true;
+    return;
+  }
+
+  // identity received
+  if(data.type==="identity" && !identityReceived){
+    identityReceived = true;
+
+    inbox.push({ time: now(), from: "them", text: `IDENTITY → ${data.username} | ${data.desc} | ${data.id8}` });
+    addChat(`[${now()}] Them → ${data.username} | ${data.desc} | ${data.id8}`, "them");
+    addSys("They connected: " + data.username + " | " + data.desc + " | " + data.id8);
+
+    if(!identitySentBack){
       sendIdentity();
       identitySentBack = true;
     }
 
-    if(data.type==="identity" && !identityReceived){
-      identityReceived = true;
-      inbox.push({ time: now(), from: "them", text: `IDENTITY → ${data.username} | ${data.desc} | ${data.id8}` });
-      addChat(`[${now()}] Them → ${data.username} | ${data.desc} | ${data.id8}`, "them");
-      addSys("They connected: " + data.username + " | " + data.desc + " | " + data.id8);
-
-      if(!identitySentBack){
-        sendIdentity();
-        identitySentBack = true;
-      }
-    }
-
-    if(data.type==="msg"){
-      inbox.push({ time: now(), from: "them", text: data.text });
-      addChat(`[${now()}] Them: ${data.text}`,"them");
-    }
+    return;
   }
+}
+
 
   function sendIdentity(){
     if(!conn) return;
