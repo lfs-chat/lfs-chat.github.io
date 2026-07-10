@@ -2,7 +2,7 @@
 <html>
 <head>
 <meta charset="UTF-8">
-<title>LFS-Chat</title>
+<title>PeerChat</title>
 <style>
   body { background:#0f172a; color:#e5e7eb; font-family:Arial; padding:20px; }
   input,button { padding:8px; border:none; border-radius:6px; margin:4px 0; }
@@ -22,7 +22,7 @@
   .pill { display:inline-block; padding:6px 10px; background:#020617; border-radius:999px; border:1px solid #1f2937; margin-right:6px; margin-bottom:6px; }
   label { display:inline-block; margin-top:10px; }
 
-  /* NEW: hide fingerprint */
+  /* hide fingerprint */
   .hidden { display:none; }
 </style>
 </head>
@@ -44,9 +44,8 @@
   <div class="pill" id="pill_name"></div>
   <div class="pill" id="pill_desc"></div>
   <div class="pill" id="pill_id"></div>
-  <div class="pill" id="pill_hash"></div>
 
-  <!-- NEW: fingerprint pill with show/hide + copy -->
+  <!-- fingerprint only -->
   <div class="pill">
     <span id="pill_fingerprint" class="hidden"></span>
     <button id="toggle_fp_btn" onclick="toggleFingerprint()" style="margin-left:10px; background:#334155;">
@@ -183,7 +182,6 @@
     document.getElementById("pill_name").textContent="Username: "+username;
     document.getElementById("pill_desc").textContent="Desc: "+desc;
     document.getElementById("pill_id").textContent="ID: "+id8;
-    document.getElementById("pill_hash").textContent="HASH: "+hash;
 
     peer=new Peer(id8);
     peer.on("open",id=>{
@@ -339,7 +337,6 @@
     content += `Username: ${username}\n`;
     content += `Desc: ${desc}\n`;
     content += `ID: ${id8}\n`;
-    content += `Hash: ${hash}\n`;
     const fp = document.getElementById("pill_fingerprint")?.textContent || "";
     content += `${fp}\n\n`;
 
@@ -373,7 +370,7 @@
     }
   }
 
-  /* NEW: toggle fingerprint visibility */
+  /* toggle fingerprint visibility */
   function toggleFingerprint(){
     const fp = document.getElementById("pill_fingerprint");
     const btn = document.getElementById("toggle_fp_btn");
@@ -387,7 +384,7 @@
     }
   }
 
-  /* NEW: copy fingerprint */
+  /* copy fingerprint */
   function copyFingerprint(){
     const fp = document.getElementById("pill_fingerprint").textContent.replace("Fingerprint: ","");
     navigator.clipboard.writeText(fp).then(()=>{
