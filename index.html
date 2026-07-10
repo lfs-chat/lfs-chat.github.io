@@ -2,7 +2,7 @@
 <html>
 <head>
 <meta charset="UTF-8">
-<title>LFS-Chat</title>
+<title>PeerChat</title>
 <style>
   body { background:#0f172a; color:#e5e7eb; font-family:Arial; padding:20px; }
   input,button { padding:8px; border:none; border-radius:6px; margin:4px 0; }
@@ -22,7 +22,6 @@
   .pill { display:inline-block; padding:6px 10px; background:#020617; border-radius:999px; border:1px solid #1f2937; margin-right:6px; margin-bottom:6px; }
   label { display:inline-block; margin-top:10px; }
 
-  /* hide fingerprint */
   .hidden { display:none; }
 </style>
 </head>
@@ -45,7 +44,6 @@
   <div class="pill" id="pill_desc"></div>
   <div class="pill" id="pill_id"></div>
 
-  <!-- fingerprint only -->
   <div class="pill">
     <span id="pill_fingerprint" class="hidden"></span>
     <button id="toggle_fp_btn" onclick="toggleFingerprint()" style="margin-left:10px; background:#334155;">
@@ -56,7 +54,7 @@
     </button>
   </div>
 
-  <div class="pill" id="pill_peer">PeerJS: loading…</div>
+  <div class="pill" id="pill_peer">PeerJS: Connecting…</div>
 
   <h3>System Log</h3>
   <div id="syslog"></div>
@@ -128,7 +126,7 @@
 
     let finalKey = hash + ":" + encoded;
 
-    alert("SAVE THIS LOGIN FINGERPRINT:\n\n" + finalKey + "\n\nPaste it into a text document. Do NOT share it.");
+    alert("SAVE THIS LOGIN FINGERPRINT:\n\n" + finalKey);
 
     startChat();
 
@@ -185,7 +183,7 @@
 
     peer=new Peer(id8);
     peer.on("open",id=>{
-      document.getElementById("pill_peer").textContent="PeerJS: "+id;
+      document.getElementById("pill_peer").textContent="PeerJS: Connected";
       addSys("PeerJS open: " + id + " at " + now());
     });
 
@@ -203,9 +201,7 @@
     window.onbeforeunload = function(e){
       const auto = document.getElementById("auto_download_checkbox");
       if(auto && auto.checked){
-        alert("Downloading it...");
         downloadLogs(true);
-        alert("Done, you can now safely leave.");
       }
     };
   }
@@ -218,7 +214,7 @@
 
     conn.on("open",()=>{
       conn.send({ type:"identity_request" });
-      addSys("You connected to " + target + " at " + now());
+      addSys("You connected to " + target);
 
       conn.on("data",data=>{
         handleData(data);
@@ -238,7 +234,7 @@
       identityReceived = true;
       inbox.push({ time: now(), from: "them", text: `IDENTITY → ${data.username} | ${data.desc} | ${data.id8}` });
       addChat(`[${now()}] Them → ${data.username} | ${data.desc} | ${data.id8}`, "them");
-      addSys("They connected: " + data.username + " | " + data.desc + " | " + data.id8 + " at " + now());
+      addSys("They connected: " + data.username + " | " + data.desc + " | " + data.id8);
 
       if(!identitySentBack){
         sendIdentity();
@@ -271,28 +267,25 @@
 
     if(!conn || conn.open === false){
       const targetID = document.getElementById("peer_input").value.trim();
-      addSys(`ID ${targetID} is offline at ${now()}`);
+      addSys(`ID ${targetID} is offline`);
 
       let choice = prompt(
         "They are offline.\n\n" +
-        "Do you want to send this message to their outbox?\n\n" +
+        "Send to outbox?\n\n" +
         "1. Yes\n" +
-        "2. No\n\n" +
-        "Outbox explained:\n" +
-        "If you choose YES, the message will be saved in your outbox.\n" +
-        "When the other person comes online, PeerChat will automatically send all queued outbox messages.\n"
+        "2. No"
       );
 
       if(choice === "1"){
         outbox.push(entry);
         addChat(`[${entry.time}] (queued) You: ${text}`, "you");
-        addSys("Message added to outbox at " + entry.time);
+        addSys("Message added to outbox");
       } else {
-        addSys("Message cancelled at " + entry.time);
+        addSys("Message cancelled");
       }
 
       document.getElementById("msg_input").value="";
-      return;
+      return;  // FIXED: stops message from sending immediately
     }
 
     conn.send({type:"msg",text});
@@ -308,7 +301,7 @@
         conn.send({ type:"msg", text:m.text });
       }
     });
-    addSys("Outbox flushed at " + now());
+    addSys("Outbox flushed");
   }
 
   function addChat(text,who){
@@ -370,7 +363,6 @@
     }
   }
 
-  /* toggle fingerprint visibility */
   function toggleFingerprint(){
     const fp = document.getElementById("pill_fingerprint");
     const btn = document.getElementById("toggle_fp_btn");
@@ -384,7 +376,6 @@
     }
   }
 
-  /* copy fingerprint */
   function copyFingerprint(){
     const fp = document.getElementById("pill_fingerprint").textContent.replace("Fingerprint: ","");
     navigator.clipboard.writeText(fp).then(()=>{
