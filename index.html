@@ -21,6 +21,9 @@
   .sys { color:#a5f3fc; font-style:italic; }
   .pill { display:inline-block; padding:6px 10px; background:#020617; border-radius:999px; border:1px solid #1f2937; margin-right:6px; margin-bottom:6px; }
   label { display:inline-block; margin-top:10px; }
+
+  /* NEW: hide fingerprint */
+  .hidden { display:none; }
 </style>
 </head>
 <body>
@@ -42,7 +45,18 @@
   <div class="pill" id="pill_desc"></div>
   <div class="pill" id="pill_id"></div>
   <div class="pill" id="pill_hash"></div>
-  <div class="pill" id="pill_fingerprint"></div>
+
+  <!-- NEW: fingerprint pill with show/hide + copy -->
+  <div class="pill">
+    <span id="pill_fingerprint" class="hidden"></span>
+    <button id="toggle_fp_btn" onclick="toggleFingerprint()" style="margin-left:10px; background:#334155;">
+      Show Fingerprint
+    </button>
+    <button onclick="copyFingerprint()" style="margin-left:10px; background:#475569;">
+      Copy
+    </button>
+  </div>
+
   <div class="pill" id="pill_peer">PeerJS: loading…</div>
 
   <h3>System Log</h3>
@@ -119,7 +133,11 @@
 
     startChat();
 
-    document.getElementById("pill_fingerprint").textContent = "Fingerprint: " + finalKey;
+    const fp = document.getElementById("pill_fingerprint");
+    fp.textContent = "Fingerprint: " + finalKey;
+    fp.classList.add("hidden");
+    document.getElementById("toggle_fp_btn").textContent = "Show Fingerprint";
+
     addSys("Account created at " + now());
   }
 
@@ -150,7 +168,11 @@
 
     startChat();
 
-    document.getElementById("pill_fingerprint").textContent = "Fingerprint: " + key;
+    const fp = document.getElementById("pill_fingerprint");
+    fp.textContent = "Fingerprint: " + key;
+    fp.classList.add("hidden");
+    document.getElementById("toggle_fp_btn").textContent = "Show Fingerprint";
+
     addSys("Signed in at " + now());
   }
 
@@ -350,9 +372,30 @@
       alert("peerchat_export.txt downloaded.");
     }
   }
+
+  /* NEW: toggle fingerprint visibility */
+  function toggleFingerprint(){
+    const fp = document.getElementById("pill_fingerprint");
+    const btn = document.getElementById("toggle_fp_btn");
+
+    if(fp.classList.contains("hidden")){
+      fp.classList.remove("hidden");
+      btn.textContent = "Hide Fingerprint";
+    } else {
+      fp.classList.add("hidden");
+      btn.textContent = "Show Fingerprint";
+    }
+  }
+
+  /* NEW: copy fingerprint */
+  function copyFingerprint(){
+    const fp = document.getElementById("pill_fingerprint").textContent.replace("Fingerprint: ","");
+    navigator.clipboard.writeText(fp).then(()=>{
+      alert("Fingerprint copied!");
+    });
+  }
+
 </script>
 
 </body>
-  <!-- rebuild -->
-
 </html>
